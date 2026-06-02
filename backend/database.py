@@ -28,8 +28,31 @@ def init_db():
             summary TEXT,
             published_at TIMESTAMP,
             image_url TEXT,
+            author TEXT,
             FOREIGN KEY (feed_id) REFERENCES feeds(id)
         );
+        CREATE TABLE IF NOT EXISTS tags (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        );
+        CREATE TABLE IF NOT EXISTS article_tags (
+            article_id INTEGER NOT NULL,
+            tag_id INTEGER NOT NULL,
+            PRIMARY KEY (article_id, tag_id),
+            FOREIGN KEY (article_id) REFERENCES articles(id),
+            FOREIGN KEY (tag_id) REFERENCES tags(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
     """)
+    for migration in [
+        "ALTER TABLE articles ADD COLUMN author TEXT",
+        "ALTER TABLE articles ADD COLUMN read_at TIMESTAMP",
+        "ALTER TABLE feeds ADD COLUMN last_fetched_at TIMESTAMP",
+        "ALTER TABLE articles ADD COLUMN read_time_minutes INTEGER",
+    ]:
+        try:
+            db.execute(migration)
+        except Exception:
+            pass
     db.commit()
     db.close()

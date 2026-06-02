@@ -6,3 +6,7 @@ class FeedCreate(BaseModel):
     name: str
     url: HttpUrl
     category: str = "uncategorized"
+
+
+class TagCreate(BaseModel):
+    name: str
