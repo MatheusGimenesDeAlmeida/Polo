@@ -108,8 +108,62 @@ class _ArticleLinkParser(HTMLParser):
             self._buf.append(data)
 
 
+_DATE_RE = re.compile(
+    r'(?:"datePublished"\s*:\s*"|article:published_time"\s+content="|datetime=")'
+    r"(\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?)"
+)
+
+
+def _fetch_article_date(url: str) -> str | None:
+    """Reads the real publication date from an article page (None if unavailable)."""
+    # Sequoia links come with a trailing dot in the host ("sequoiacap.com."), which breaks TLS.
+    fetch_url = re.sub(r"^(https?://[^/]+?)\./", r"\1/", url)
+    req = urllib.request.Request(fetch_url, headers=_BROWSER_HEADERS)
+    try:
+        html = urllib.request.urlopen(req, timeout=15).read().decode("utf-8", errors="replace")
+    except Exception as e:
+        logger.warning(f"Could not fetch date for {url}: {e}")
+        return None
+    m = _DATE_RE.search(html)
+    if not m:
+        return None
+    raw = m.group(1)
+    return raw if "T" in raw else f"{raw}T00:00:00"
+
+
+async def _fetch_dates(urls: list[str]) -> dict[str, str | None]:
+    loop = asyncio.get_event_loop()
+    sem = asyncio.Semaphore(5)
+
+    async def one(url: str):
+        async with sem:
+            return url, await loop.run_in_executor(None, _fetch_article_date, url)
+
+    return dict(await asyncio.gather(*(one(u) for u in urls)))
+
+
+async def _backfill_scraped_dates(feed_id: int):
+    """Fixes articles stored with the fetch time as published_at (they carry microseconds)."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, url FROM articles WHERE feed_id = ? AND published_at LIKE '%.%'", (feed_id,)
+    ).fetchall()
+    db.close()
+    if not rows:
+        return
+    dates = await _fetch_dates([r["url"] for r in rows])
+    db = get_db()
+    for r in rows:
+        db.execute("UPDATE articles SET published_at = ? WHERE id = ?", (dates.get(r["url"]), r["id"]))
+    db.commit()
+    db.close()
+    logger.info(f"Backfilled publication dates for {len(rows)} scraped articles")
+
+
 async def fetch_scraped_feed(feed: dict, article_re: re.Pattern, base_url: str, author: str | None = None):
     """Generic scraper for sites without RSS. Respects a 24 h refetch interval."""
+    await _backfill_scraped_dates(feed["id"])
+
     last_fetched = feed.get("last_fetched_at")
     if last_fetched:
         try:
@@ -137,16 +191,24 @@ async def fetch_scraped_feed(feed: dict, article_re: re.Pattern, base_url: str, 
     seen: set[str] = set()
     now = datetime.now().isoformat()
 
+    unique: list[tuple[str, str]] = []
     for url, title in parser.articles:
-        if url in seen:
+        if url not in seen:
+            seen.add(url)
+            unique.append((url, title))
+
+    existing = {r["url"] for r in db.execute("SELECT url FROM articles WHERE feed_id = ?", (feed["id"],))}
+    dates = await _fetch_dates([u for u, _ in unique if u not in existing])
+
+    for url, title in unique:
+        if url in existing:
             continue
-        seen.add(url)
         try:
             db.execute(
                 "INSERT OR IGNORE INTO articles "
                 "(feed_id, title, url, summary, published_at, image_url, author) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (feed["id"], title, url, None, now, None, author),
+                (feed["id"], title, url, None, dates.get(url), None, author),
             )
             count += 1
         except Exception as e:
