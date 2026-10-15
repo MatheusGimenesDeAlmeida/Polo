@@ -33,7 +33,20 @@ export default function TagPicker({ article, allTags, onTagsChange, onTagCreated
     e.preventDefault()
     e.stopPropagation()
     const rect = btnRef.current.getBoundingClientRect()
-    setPos({ top: rect.bottom + 6, left: rect.left })
+    const PANEL_H = 220
+    const PANEL_W = 230
+
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
+    const top = spaceBelow >= PANEL_H || spaceBelow >= spaceAbove
+      ? Math.min(rect.bottom + 6, window.innerHeight - PANEL_H - 8)
+      : Math.max(8, rect.top - PANEL_H - 6)
+
+    const left = rect.right - PANEL_W < 8
+      ? Math.max(8, rect.left)
+      : Math.min(rect.left, window.innerWidth - PANEL_W - 8)
+
+    setPos({ top, left })
     setOpen(o => !o)
   }
 

@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_db, init_db
 from feeds import fetch_and_store_articles
-from models import FeedCreate, TagCreate
+from models import FeedCreate, TagCreate, ReflectionUpdate, IdeiaCreate, IdeiaUpdate
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -214,6 +214,128 @@ def remove_tag_from_article(article_id: int, tag_id: int):
         "DELETE FROM article_tags WHERE article_id = ? AND tag_id = ?",
         (article_id, tag_id),
     )
+    db.commit()
+    db.close()
+
+
+# ── Ideias ────────────────────────────────────
+
+@app.get("/ideias")
+def list_ideias():
+    db = get_db()
+    ideias = [dict(r) for r in db.execute("SELECT * FROM ideias ORDER BY created_at DESC").fetchall()]
+    db.close()
+    return ideias
+
+
+@app.post("/ideias", status_code=201)
+def create_ideia(body: IdeiaCreate):
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO ideias (content, color) VALUES (?, ?)",
+        (body.content, body.color),
+    )
+    db.commit()
+    ideia = dict(db.execute("SELECT * FROM ideias WHERE id = ?", (cursor.lastrowid,)).fetchone())
+    db.close()
+    return ideia
+
+
+@app.patch("/ideias/{ideia_id}")
+def update_ideia(ideia_id: int, body: IdeiaUpdate):
+    db = get_db()
+    if not db.execute("SELECT id FROM ideias WHERE id = ?", (ideia_id,)).fetchone():
+        db.close()
+        raise HTTPException(404, "Ideia not found")
+    updates = body.model_dump(exclude_unset=True)
+    if updates:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        set_clause += ", updated_at = CURRENT_TIMESTAMP"
+        db.execute(
+            f"UPDATE ideias SET {set_clause} WHERE id = ?",
+            [*updates.values(), ideia_id],
+        )
+        db.commit()
+    ideia = dict(db.execute("SELECT * FROM ideias WHERE id = ?", (ideia_id,)).fetchone())
+    db.close()
+    return ideia
+
+
+@app.delete("/ideias/{ideia_id}", status_code=204)
+def delete_ideia(ideia_id: int):
+    db = get_db()
+    db.execute("DELETE FROM ideias WHERE id = ?", (ideia_id,))
+    db.commit()
+    db.close()
+
+
+# ── Reflections ───────────────────────────────
+
+@app.get("/reflections")
+def list_reflections():
+    db = get_db()
+    rows = db.execute("""
+        SELECT r.id, r.article_id, r.insight, r.nstech, r.ideia, r.anotacao, r.saved_at,
+               a.title, a.url, a.summary, a.published_at, a.author, a.image_url, a.read_time_minutes,
+               f.name as feed_name, f.category,
+               GROUP_CONCAT(t.id || '|' || t.name) as tags_raw
+        FROM reflections r
+        JOIN articles a ON r.article_id = a.id
+        JOIN feeds f ON a.feed_id = f.id
+        LEFT JOIN article_tags atag ON a.id = atag.article_id
+        LEFT JOIN tags t ON atag.tag_id = t.id
+        GROUP BY r.id
+        ORDER BY r.saved_at DESC
+    """).fetchall()
+    result = []
+    for row in rows:
+        r = dict(row)
+        r["tags"] = _parse_tags(r.pop("tags_raw", None))
+        result.append(r)
+    db.close()
+    return result
+
+
+@app.post("/articles/{article_id}/reflect", status_code=201)
+def save_reflection(article_id: int):
+    db = get_db()
+    if not db.execute("SELECT id FROM articles WHERE id = ?", (article_id,)).fetchone():
+        db.close()
+        raise HTTPException(404, "Article not found")
+    existing = db.execute("SELECT * FROM reflections WHERE article_id = ?", (article_id,)).fetchone()
+    if existing:
+        db.close()
+        return dict(existing)
+    cursor = db.execute("INSERT INTO reflections (article_id) VALUES (?)", (article_id,))
+    db.commit()
+    reflection = dict(db.execute("SELECT * FROM reflections WHERE id = ?", (cursor.lastrowid,)).fetchone())
+    db.close()
+    return reflection
+
+
+@app.patch("/articles/{article_id}/reflect")
+def update_reflection(article_id: int, body: ReflectionUpdate):
+    db = get_db()
+    if not db.execute("SELECT id FROM reflections WHERE article_id = ?", (article_id,)).fetchone():
+        db.close()
+        raise HTTPException(404, "Reflection not found")
+    updates = body.model_dump(exclude_unset=True)
+    if updates:
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        db.execute(
+            f"UPDATE reflections SET {set_clause} WHERE article_id = ?",
+            [*updates.values(), article_id],
+        )
+        db.commit()
+    reflection = dict(db.execute("SELECT * FROM reflections WHERE article_id = ?", (article_id,)).fetchone())
+    db.close()
+    return reflection
+
+
+@app.delete("/articles/{article_id}/reflect", status_code=204)
+def delete_reflection(article_id: int):
+    db = get_db()
+    db.execute("DELETE FROM reflections WHERE article_id = ?", (article_id,))
     db.commit()
     db.close()
 

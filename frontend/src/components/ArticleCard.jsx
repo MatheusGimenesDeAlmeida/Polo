@@ -1,5 +1,3 @@
-import TagPicker from './TagPicker'
-
 function formatDate(iso) {
   if (!iso) return ''
   try {
@@ -13,7 +11,11 @@ function formatDate(iso) {
   }
 }
 
-export default function ArticleCard({ article, allTags, onTagsChange, onTagCreated, onReadToggle }) {
+export default function ArticleCard({
+  article, onReadToggle,
+  isSaved, onSaveReflection,
+  mode, onOpenReflection,
+}) {
   const tags = article.tags || []
   const isRead = !!article.read_at
 
@@ -21,6 +23,18 @@ export default function ArticleCard({ article, allTags, onTagsChange, onTagCreat
     e.preventDefault()
     e.stopPropagation()
     onReadToggle(article.id)
+  }
+
+  function handleBookmarkClick(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isSaved) onSaveReflection(article)
+  }
+
+  function handleAcessarClick(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    onOpenReflection()
   }
 
   return (
@@ -64,24 +78,33 @@ export default function ArticleCard({ article, allTags, onTagsChange, onTagCreat
         )}
         <div className="card-footer">
           <div className="card-tags">
-            {tags.map(t => (
+            {mode === 'reflexao' && tags.map(t => (
               <span key={t.id} className="card-tag">{t.name}</span>
             ))}
           </div>
           <div className="card-actions">
-            <button
-              className={`btn-read${isRead ? ' btn-read--done' : ''}`}
-              onClick={handleReadClick}
-              title={isRead ? 'Marcar como não lido' : 'Marcar como lido'}
-            >
-              {isRead ? '✓' : '○'}
-            </button>
-            <TagPicker
-              article={article}
-              allTags={allTags}
-              onTagsChange={onTagsChange}
-              onTagCreated={onTagCreated}
-            />
+            {mode === 'reflexao' ? (
+              <button className="btn-acessar" onClick={handleAcessarClick}>
+                Acessar reflexão
+              </button>
+            ) : (
+              <>
+                <button
+                  className={`btn-bookmark${isSaved ? ' btn-bookmark--saved' : ''}`}
+                  onClick={handleBookmarkClick}
+                  title={isSaved ? 'Salvo na Reflexão' : 'Salvar para reflexão'}
+                >
+                  {isSaved ? '★' : '☆'}
+                </button>
+                <button
+                  className={`btn-read${isRead ? ' btn-read--done' : ''}`}
+                  onClick={handleReadClick}
+                  title={isRead ? 'Marcar como não lido' : 'Marcar como lido'}
+                >
+                  {isRead ? '✓' : '○'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -43,6 +43,22 @@ def init_db():
             FOREIGN KEY (tag_id) REFERENCES tags(id)
         );
         CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
+        CREATE TABLE IF NOT EXISTS ideias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL DEFAULT '',
+            color TEXT NOT NULL DEFAULT '#c9a84c',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS reflections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            article_id INTEGER NOT NULL UNIQUE REFERENCES articles(id),
+            insight TEXT,
+            nstech TEXT,
+            ideia TEXT,
+            anotacao TEXT,
+            saved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
     """)
     for migration in [
         "ALTER TABLE articles ADD COLUMN author TEXT",

@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['kaan.png'],
+      includeAssets: ['kaan.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'Polo — Seu Feed de Leitura',
         short_name: 'Polo',
@@ -17,9 +17,10 @@ export default defineConfig({
         background_color: '#4a5568',
         display: 'standalone',
         start_url: '/Polo/',
+        scope: '/Polo/',
         icons: [
-          { src: 'kaan.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: 'kaan.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         ],
       },
     }),
